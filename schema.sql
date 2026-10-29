@@ -12,7 +12,9 @@ CREATE TABLE courses (
 CREATE TABLE students (
                           id    bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
                           name  text   NOT NULL CHECK (char_length(name) >= 2),
-                          email text   NOT NULL UNIQUE
+                          email text   NOT NULL UNIQUE,
+                          CONSTRAINT students_email_format CHECK (position('@' IN email) > 1)
+);
 );
 
 CREATE TABLE enrollments (

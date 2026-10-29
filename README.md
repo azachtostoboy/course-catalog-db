@@ -137,3 +137,24 @@ Scenario: enroll a new student in a course — two inserts in one transaction.
 | Deletion | **Yes.** `ON DELETE RESTRICT` на `course_id` и `ON DELETE CASCADE` на `student_id`. |
 | Normalization | **Yes.** Таблицы нормализованы (3NF), дублирования данных нет. |
 | Indexes and names | **Yes.** Добавлен индекс `enrollments_student_id_idx`, именование в `snake_case`. |
+|               |        |
+|               |        |## Bonus
+
+### Task 1. Normalization: three anomalies of a flat table (`experiments/norm_demo.sql`)
+- **Аномалия обновления (Update anomaly):** В плоской таблице `registrations` название курса дублируется в каждой строке записи. При переименовании курса `modern-frontend` только в одной строке у одного и того же `course_id` оказалось сразу два разных названия. В нормализованной схеме название хранится один раз в таблице `courses`.
+- **Аномалия удаления (Delete anomaly):** При удалении единственной записи Данияра на курс `backend-fastapi` из плоской таблицы исчезла и вся информация о самом курсе (название и кредиты). В нормализованной схеме удаление строки из `enrollments` никак не затрагивает сам курс в таблице `courses`.
+- **Аномалия вставки (Insert anomaly):** Чтобы добавить в плоскую таблицу новый курс `web-security`, на который ещё никто не записался, пришлось вставлять строку с пустыми (`NULL`) данными студента. Разделение на три таблицы (`courses`, `students`, `enrollments`) полностью устраняет все три аномалии.
+
+### Task 2. Lost update and row lock
+- При схеме «прочитать `likes` в программу → прибавить 1 → записать обратно (`SET likes = 12`)» два параллельных клиента читают одно и то же старое значение `11` и оба записывают `12` — один лайк теряется (**lost update**).
+- Команда `UPDATE courses SET likes = likes + 1 WHERE id = 'api-design'` выполняется атомарно и ставит **блокировку строки (row lock)** до конца транзакции. Второй клиент ждёт завершения `COMMIT` первого клиента, после чего перечитывает уже обновлённое значение `12` и увеличивает его до `13`.
+
+### Task 3. Parameters instead of concatenation (SQL injection)
+- При склеивании строк ввод `'x' OR '1'='1'` меняет саму структуру SQL-команды, превращая условие `WHERE` в вечно истинное и возвращая все 6 курсов.
+- При использовании параметризованного запроса (`PREPARE by_id (text) AS SELECT ... WHERE id = $1`) структура плана запроса фиксируется заранее, а значение `$1` передаётся отдельно от кода команды и воспринимается базой исключительно как строковый литерал, поэтому инъекция невозможна (возвращается `0 rows`).
+
+### Task 4. Queries with `LEFT JOIN ... IS NULL` and `HAVING`
+- В `queries.sql` добавлены запрос №7 (курсы без записей: `api-design`, `databases-postgresql`, `web-security` через `LEFT JOIN` и `WHERE e.id IS NULL`) и запрос №8 (студенты, записанные более чем на один курс, через `GROUP BY` и `HAVING count(*) > 1`: Daniyar Bekov — 3, Aigerim Sadykova — 2).
+
+### Task 5. Live table constraint via `ALTER TABLE`
+- В таблицу `students` без пересоздания и потери данных добавлено ограничение `ALTER TABLE students ADD CONSTRAINT students_email_format CHECK (position('@' IN email) > 1);`, отклоняющее email без символа `@` (и зафиксировано в `schema.sql`).
